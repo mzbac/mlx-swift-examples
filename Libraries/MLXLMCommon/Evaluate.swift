@@ -70,17 +70,32 @@ public struct GenerateParameters: Sendable {
 
     /// number of tokens to consider for repetition penalty
     public var repetitionContextSize: Int = 20
+    
+    /// Number of bits for KV cache quantization (nil for no quantization, 4 or 8)
+    public var kvBits: Int? = nil
+    
+    /// Group size for KV cache quantization
+    public var kvGroupSize: Int = 64
+    
+    /// When to start KV cache quantization (number of tokens)
+    public var kvQuantizationStart: Int = 0
 
     public init(
         maxTokens: Int? = nil,
         temperature: Float = 0.6, topP: Float = 1.0, repetitionPenalty: Float? = nil,
-        repetitionContextSize: Int = 20
+        repetitionContextSize: Int = 20,
+        kvBits: Int? = nil,
+        kvGroupSize: Int = 64,
+        kvQuantizationStart: Int = 0
     ) {
         self.maxTokens = maxTokens
         self.temperature = temperature
         self.topP = topP
         self.repetitionPenalty = repetitionPenalty
         self.repetitionContextSize = repetitionContextSize
+        self.kvBits = kvBits
+        self.kvGroupSize = kvGroupSize
+        self.kvQuantizationStart = kvQuantizationStart
     }
 
     public func sampler() -> LogitSampler {
@@ -256,6 +271,9 @@ public struct TokenIterator: Sequence, IteratorProtocol {
 
     var tokenCount = 0
     let maxTokens: Int?
+    
+    // Store parameters for cache quantization
+    let currentParameters: GenerateParameters?
 
     /// Initialize a `TokenIterator` with the given tokens.  Note: this has been
     /// replaced with ``init(input:model:cache:parameters:)``.
@@ -277,6 +295,7 @@ public struct TokenIterator: Sequence, IteratorProtocol {
         self.processor = parameters.processor()
         self.sampler = parameters.sampler()
         self.maxTokens = parameters.maxTokens
+        self.currentParameters = parameters
 
         try prepare(input: .init(text: y), windowSize: parameters.prefillStepSize)
     }
@@ -304,6 +323,7 @@ public struct TokenIterator: Sequence, IteratorProtocol {
         self.processor = parameters.processor()
         self.sampler = parameters.sampler()
         self.maxTokens = parameters.maxTokens
+        self.currentParameters = parameters
 
         try prepare(input: input, windowSize: parameters.prefillStepSize)
     }
@@ -330,6 +350,7 @@ public struct TokenIterator: Sequence, IteratorProtocol {
         self.processor = processor
         self.sampler = sampler
         self.maxTokens = maxTokens
+        self.currentParameters = nil  // No parameters provided for manual setup
 
         try prepare(input: input, windowSize: prefillStepSize)
     }
@@ -340,6 +361,9 @@ public struct TokenIterator: Sequence, IteratorProtocol {
         switch try model.prepare(input, cache: cache, windowSize: windowSize) {
         case .tokens(let tokens):
             y = tokens
+            
+            // Check if we need to convert cache after prompt processing
+            maybeQuantizeCache()
 
             // evaluate the remainder of the prompt -- this primes the pump
             let token = step(previous: y)
@@ -347,6 +371,9 @@ public struct TokenIterator: Sequence, IteratorProtocol {
             asyncEval(y.tokens)
 
         case .logits(let result):
+            // Check if we need to convert cache after prompt processing
+            maybeQuantizeCache()
+            
             y = .init(tokens: convertToToken(logits: result.logits))
             asyncEval(y.tokens)
 
@@ -369,11 +396,37 @@ public struct TokenIterator: Sequence, IteratorProtocol {
 
     /// Evaluate the next token and return the new token (y), updating cache state
     mutating func step(previous: LMInput.Text) -> MLXArray {
+        // Check if we need to convert cache to quantized
+        maybeQuantizeCache()
+        
         let result = model(
             previous[text: .newAxis], cache: cache.isEmpty ? nil : cache, state: state)
         self.state = result.state
 
         return convertToToken(logits: result.logits)
+    }
+    
+    /// Convert regular cache to quantized cache if conditions are met
+    /// Following mlx-lm's maybe_quantize_kv_cache pattern
+    mutating func maybeQuantizeCache() {
+        // Get parameters from the processor if available
+        guard let params = currentParameters,
+              let kvBits = params.kvBits,
+              !cache.isEmpty,
+              !(cache[0] is QuantizedKVCache), // Not already quantized
+              cache[0].offset > params.kvQuantizationStart else {
+            return
+        }
+        
+        // Convert each cache layer to quantized
+        for i in 0..<cache.count {
+            if let simpleCache = cache[i] as? KVCacheSimple {
+                cache[i] = simpleCache.toQuantized(
+                    groupSize: params.kvGroupSize,
+                    bits: kvBits
+                )
+            }
+        }
     }
 
     mutating public func next() -> Int? {

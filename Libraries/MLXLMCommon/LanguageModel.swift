@@ -204,7 +204,15 @@ public protocol KVCacheDimensionProvider {
 extension LanguageModel where Self: KVCacheDimensionProvider {
     public func newCache(parameters: GenerateParameters?) -> [KVCache] {
         kvHeads.map { n in
-            KVCacheSimple()
+            // Create quantized cache if kvBits is specified, otherwise regular cache
+            if let kvBits = parameters?.kvBits {
+                return QuantizedKVCache(
+                    groupSize: parameters?.kvGroupSize ?? 64,
+                    bits: kvBits
+                )
+            } else {
+                return KVCacheSimple()
+            }
         }
     }
 }

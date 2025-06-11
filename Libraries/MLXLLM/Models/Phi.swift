@@ -68,8 +68,8 @@ private class PhiAttention: Module {
 
         // Finally perform the attention computation
         let scale = sqrt(1 / Float(queries.dim(-1)))
-        let output = MLXFast.scaledDotProductAttention(
-            queries: queries.asType(.float32), keys: keys, values: values, scale: scale, mask: mask
+        let output = MLXLMCommon.scaledDotProductAttention(
+            queries: queries.asType(.float32), keys: keys, values: values, cache: cache, scale: scale, mask: mask
         )
         .asType(values.dtype)
         .transposed(0, 2, 1, 3)

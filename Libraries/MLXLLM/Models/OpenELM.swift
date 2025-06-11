@@ -85,8 +85,8 @@ private class MultiHeadCausalAttention: Module {
             keys = rope(keys)
         }
 
-        let output = MLXFast.scaledDotProductAttention(
-            queries: queries, keys: keys, values: values, scale: scale, mask: mask
+        let output = MLXLMCommon.scaledDotProductAttention(
+            queries: queries, keys: keys, values: values, cache: cache, scale: scale, mask: mask
         ).transposed(0, 2, 1, 3).reshaped(B, L, heads * headDim)
 
         return outProj(output)

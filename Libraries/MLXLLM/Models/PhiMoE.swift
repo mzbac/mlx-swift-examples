@@ -98,8 +98,8 @@ private class Attention: Module {
             k = rope(k)
         }
 
-        let output = MLXFast.scaledDotProductAttention(
-            queries: q, keys: k, values: v, scale: scale, mask: mask
+        let output = MLXLMCommon.scaledDotProductAttention(
+            queries: q, keys: k, values: v, cache: cache, scale: scale, mask: mask
         )
         .transposed(0, 2, 1, 3)
         .reshaped(B, L, -1)
