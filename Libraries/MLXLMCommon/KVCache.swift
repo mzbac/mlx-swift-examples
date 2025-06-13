@@ -3,17 +3,23 @@
 import Foundation
 import MLX
 
-/// Interface for Key/Value cache for LLMs.
-///
-/// See ``LanguageModel/newCache(parameters:)``
 public protocol KVCache: Evaluatable {
 
-    /// get the current offset
     var offset: Int { get }
 
     func update(keys: MLXArray, values: MLXArray) -> (MLXArray, MLXArray)
 
     var maxSize: Int? { get }
+    
+    var isTrimmable: Bool { get }
+    
+    func trim(_ n: Int) -> Int
+}
+
+extension KVCache {
+    public var isTrimmable: Bool { false }
+    
+    public func trim(_ n: Int) -> Int { 0 }
 }
 
 func createCausalMask(n: Int, offset: Int, windowSize: Int? = nil) -> MLXArray {
@@ -30,10 +36,6 @@ func createCausalMask(n: Int, offset: Int, windowSize: Int? = nil) -> MLXArray {
     return mask
 }
 
-/// create an attention mask using the parameters from the KVCache.
-///
-/// See also ``MultiHeadAttention/createAdditiveCausalMask(_:dtype:)`` -- same idea
-/// but doesn't honor the cache offset.
 @_disfavoredOverload
 public func createAttentionMask(h: MLXArray, cache: [KVCache]?) -> MLXArray? {
     let t = h.dim(1)
@@ -75,7 +77,6 @@ public func createAttentionMask(h: MLXArray, cache: [KVCache]?, returnArray: Boo
     return .none
 }
 
-/// See https://github.com/ml-explore/mlx-examples/blob/main/llms/mlx_lm/models/base.py#L11
 public class KVCacheSimple: KVCache, Evaluatable, CustomDebugStringConvertible {
     var keys: MLXArray?
     var values: MLXArray?
@@ -136,6 +137,14 @@ public class KVCacheSimple: KVCache, Evaluatable, CustomDebugStringConvertible {
         )
     }
 
+    public var isTrimmable: Bool { true }
+    
+    public func trim(_ n: Int) -> Int {
+        let actualTrim = min(n, offset)
+        offset -= actualTrim
+        return actualTrim
+    }
+    
     public var debugDescription: String {
         "\(String(describing: Self.self)) \(Unmanaged.passUnretained(self).toOpaque()), offset: \(offset), step: \(step), keys: \(keys?.shape.description ?? "-"), values: \(values?.shape.description ?? "-")"
     }

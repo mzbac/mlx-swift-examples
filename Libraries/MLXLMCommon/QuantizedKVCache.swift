@@ -1,14 +1,11 @@
 import Foundation
 import MLX
 
-/// Extension to KVCacheSimple to add quantization conversion capability
 extension KVCacheSimple {
-    /// Convert this cache to a quantized cache
     public func toQuantized(groupSize: Int = 64, bits: Int = 4) -> QuantizedKVCache {
         let quantizedCache = QuantizedKVCache(groupSize: groupSize, bits: bits)
         quantizedCache.offset = self.offset
         if let keys = self.keys, let values = self.values {
-            // Store quantized versions of existing data
             quantizedCache.keys = MLX.quantized(keys, groupSize: groupSize, bits: bits)
             quantizedCache.values = MLX.quantized(values, groupSize: groupSize, bits: bits)
         }
@@ -16,10 +13,7 @@ extension KVCacheSimple {
     }
 }
 
-/// Quantized KV cache implementation that stores keys and values in quantized format
-/// Based on mlx-lm's QuantizedKVCache
 public class QuantizedKVCache: KVCache, Evaluatable, CustomDebugStringConvertible {
-    // Store quantized data as tuples (data, scales, biases)
     var keys: (MLXArray, MLXArray, MLXArray)?
     var values: (MLXArray, MLXArray, MLXArray)?
     
@@ -45,9 +39,6 @@ public class QuantizedKVCache: KVCache, Evaluatable, CustomDebugStringConvertibl
         return arrays
     }
     
-    /// Update the cache with new keys/values
-    /// For compatibility with KVCache protocol, returns dummy arrays
-    /// The actual quantized data is stored internally and accessed via getQuantizedData()
     public func update(keys: MLXArray, values: MLXArray) -> (MLXArray, MLXArray) {
         let B = keys.dim(0)
         let nKvHeads = keys.dim(1)
@@ -56,9 +47,8 @@ public class QuantizedKVCache: KVCache, Evaluatable, CustomDebugStringConvertibl
         let vHeadDim = values.dim(3)
         let prev = self.offset
         
-        // Check if we need to allocate or expand the cache
         if self.keys == nil || (prev + numSteps) > self.keys!.0.dim(2) {
-            let elPerInt = 32 / self.bits  // elements per int32
+            let elPerInt = 32 / self.bits
             let newSteps = ((self.step + numSteps - 1) / self.step) * self.step
             let shape = [B, nKvHeads, newSteps]
             
@@ -82,7 +72,6 @@ public class QuantizedKVCache: KVCache, Evaluatable, CustomDebugStringConvertibl
             }
             
             if var currentKeys = self.keys, var currentValues = self.values {
-                // Trim to actual size if needed
                 if prev % self.step != 0 {
                     currentKeys = (
                         currentKeys.0[.ellipsis, ..<prev, 0...],
@@ -106,12 +95,10 @@ public class QuantizedKVCache: KVCache, Evaluatable, CustomDebugStringConvertibl
         
         self.offset += numSteps
         
-        // Quantize the new keys and values
         let quantizedKeys = MLX.quantized(keys, groupSize: self.groupSize, bits: self.bits)
         let quantizedValues = MLX.quantized(values, groupSize: self.groupSize, bits: self.bits)
         
    
-        // Store the quantized data
         for i in 0..<3 {
             let slice = prev ..< self.offset
             switch i {
@@ -129,16 +116,11 @@ public class QuantizedKVCache: KVCache, Evaluatable, CustomDebugStringConvertibl
             }
         }
         
-        // Return dummy arrays for protocol compatibility
-        // The actual quantized data must be accessed via getQuantizedData()
         return (keys, values)
     }
     
-    /// Get the stored quantized keys and values up to the current offset
     public func getQuantizedData() -> ((MLXArray, MLXArray, MLXArray), (MLXArray, MLXArray, MLXArray))? {
         guard let keys = keys, let values = values else { return nil }
-        
-        // Return sliced tuples up to current offset
         let usedKeys = (
             keys.0[.ellipsis, ..<self.offset, 0...],
             keys.1[.ellipsis, ..<self.offset, 0...],
@@ -151,6 +133,14 @@ public class QuantizedKVCache: KVCache, Evaluatable, CustomDebugStringConvertibl
         )
         
         return (usedKeys, usedValues)
+    }
+    
+    public var isTrimmable: Bool { true }
+    
+    public func trim(_ n: Int) -> Int {
+        let actualTrim = min(n, offset)
+        offset -= actualTrim
+        return actualTrim
     }
     
     public var debugDescription: String {
