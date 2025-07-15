@@ -35,6 +35,7 @@ public class LLMTypeRegistry: ModelTypeRegistry, @unchecked Sendable {
             "phimoe": create(PhiMoEConfiguration.self, PhiMoEModel.init),
             "gemma": create(GemmaConfiguration.self, GemmaModel.init),
             "gemma2": create(Gemma2Configuration.self, Gemma2Model.init),
+            "gemma3": create(Gemma3Configuration.self, Gemma3Model.init),
             "qwen2": create(Qwen2Configuration.self, Qwen2Model.init),
             "qwen3": create(Qwen3Configuration.self, Qwen3Model.init),
             "qwen3_moe": create(Qwen3MoEConfiguration.self, Qwen3MoEModel.init),
@@ -129,6 +130,30 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
         defaultPrompt: "What is the difference between lettuce and cabbage?"
     )
 
+    static public let gemma_3_1b_it_4bit = ModelConfiguration(
+        id: "mlx-community/gemma-3-1b-it-4bit",
+        overrideTokenizer: "PreTrainedTokenizer",
+        defaultPrompt: "What is the difference between lettuce and cabbage?"
+    )
+
+    static public let gemma_3_4b_it_4bit = ModelConfiguration(
+        id: "mlx-community/gemma-3-4b-it-4bit",
+        overrideTokenizer: "PreTrainedTokenizer",
+        defaultPrompt: "What is the difference between lettuce and cabbage?"
+    )
+
+    static public let gemma_3_12b_it_4bit = ModelConfiguration(
+        id: "mlx-community/gemma-3-12b-it-4bit",
+        overrideTokenizer: "PreTrainedTokenizer",
+        defaultPrompt: "What is the difference between lettuce and cabbage?"
+    )
+
+    static public let gemma_3_27b_it_4bit = ModelConfiguration(
+        id: "mlx-community/gemma-3-27b-it-4bit",
+        overrideTokenizer: "PreTrainedTokenizer",
+        defaultPrompt: "What is the difference between lettuce and cabbage?"
+    )
+
     static public let qwen205b4bit = ModelConfiguration(
         id: "mlx-community/Qwen1.5-0.5B-Chat-4bit",
         overrideTokenizer: "PreTrainedTokenizer",
@@ -218,6 +243,10 @@ public class LLMRegistry: AbstractModelRegistry, @unchecked Sendable {
             gemma2bQuantized,
             gemma_2_2b_it_4bit,
             gemma_2_9b_it_4bit,
+            gemma_3_1b_it_4bit,
+            gemma_3_4b_it_4bit,
+            gemma_3_12b_it_4bit,
+            gemma_3_27b_it_4bit,
             granite3_3_2b_4bit,
             llama3_1_8B_4bit,
             llama3_2_1B_4bit,
